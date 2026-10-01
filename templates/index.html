@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashcard AI</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128221;</text></svg>">
+</head>
+<body data-server-key="{{ '1' if has_server_key else '0' }}">
+
+<div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+  <div class="drop-box">
+    <svg viewBox="0 0 24 24" width="64" height="64" aria-hidden="true">
+      <path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="drop-title">Rilascia il file qui</p>
+    <p class="drop-hint">PDF, DOCX o PPTX &middot; max <span id="dropMaxMb">25</span> MB</p>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Flashcard AI</span>
+  </div>
+  <div class="topbar-actions">
+    <span class="ai-badge" id="aiBadge" title="Stato del motore AI">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="aiBadgeText">controllo&hellip;</span>
+    </span>
+    <button class="btn btn-ghost" id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">
+      Impostazioni
+    </button>
+  </div>
+</header>
+
+<aside class="drawer" id="settingsPanel" hidden aria-label="Impostazioni">
+  <h2 class="drawer-title">Impostazioni</h2>
+
+  <div class="field">
+    <label for="apiKeyInput">Chiave API Gemini</label>
+    <input type="password" id="apiKeyInput" placeholder="AIza..." autocomplete="off" spellcheck="false">
+    <p class="hint">Resta nel tuo browser (localStorage). Non viene salvata su disco
+      ne' inviata al repository. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Ottieni una chiave</a>.</p>
+    <div class="row">
+      <button class="btn btn-primary btn-sm" id="saveKeyBtn">Salva</button>
+      <button class="btn btn-ghost btn-sm" id="clearKeyBtn">Rimuovi</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="modelInput">Modello</label>
+    <input type="text" id="modelInput" value="gemini-2.5-flash" spellcheck="false">
+    <p class="hint">Lascia vuoto per usare quello di default del server.</p>
+  </div>
+
+  <div class="field">
+    <label for="maxCardsInput">Numero massimo di card</label>
+    <input type="number" id="maxCardsInput" value="40" min="5" max="60">
+  </div>
+
+  <p class="drawer-note" id="storageNote"></p>
+</aside>
+
+<main class="layout">
+
+  <section class="panel panel-upload" id="uploadPanel">
+    <input type="file" id="fileInput" accept=".pdf,.docx,.pptx" hidden>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button"
+         aria-label="Carica un documento PDF, DOCX o PPTX">
+      <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
+        <path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="dz-title">Trascina qui il tuo documento</p>
+      <p class="dz-hint">oppure clicca per scegliere &middot; PDF, DOCX, PPTX</p>
+    </div>
+    <ul class="format-list">
+      <li><strong>PDF</strong> testo selezionabile</li>
+      <li><strong>DOCX</strong> con heading e tabelle</li>
+      <li><strong>PPTX</strong> slide per slide</li>
+    </ul>
+  </section>
+
+  <section class="panel panel-review" id="reviewPanel" hidden>
+    <div class="panel-head">
+      <h2>Controlla le card</h2>
+      <div class="panel-head-right">
+        <span class="muted" id="reviewMeta"></span>
+      </div>
+    </div>
+    <div class="review-toolbar">
+      <div class="type-filters" id="typeFilters" role="group" aria-label="Filtra per tipo"></div>
+      <div class="row">
+        <button class="btn btn-ghost btn-sm" id="regenBtn">Rigenera</button>
+        <button class="btn btn-ghost btn-sm" id="selectAllBtn">Seleziona tutte</button>
+        <button class="btn btn-ghost btn-sm" id="selectNoneBtn">Deseleziona</button>
+        <button class="btn btn-primary btn-sm" id="saveDeckBtn">Salva nel mazzo</button>
+      </div>
+    </div>
+    <ul class="card-preview-list" id="previewList"></ul>
+  </section>
+
+  <aside class="sidebar">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Mazzi</h2>
+        <button class="btn btn-ghost btn-sm" id="refreshDecksBtn" title="Aggiorna">&#8635;</button>
+      </div>
+      <ul class="deck-list" id="deckList"></ul>
+    </div>
+
+    <div class="panel" style="margin-top: 14px">
+      <h2>Documenti</h2>
+      <ul class="deck-list" id="docList" style="margin-top: 12px"></ul>
+    </div>
+  </aside>
+
+  <section class="panel panel-study" id="studyPanel">
+    <div class="empty" id="studyEmpty">
+      <p class="empty-title">Nessun mazzo aperto</p>
+      <p class="empty-hint">Carica un documento per iniziare a studiare.</p>
+    </div>
+
+    <div id="studyView" hidden>
+      <div class="panel-head">
+        <div>
+          <h2 id="studyDeckName">&nbsp;</h2>
+          <p class="muted" id="studyProgress"></p>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="listModeBtn">Tutte le card</button>
+      </div>
+
+      <div class="stats-row" id="statsRow"></div>
+
+      <div class="flashcard" id="flashcard" role="button" tabindex="0"
+           aria-label="Clicca per mostrare la risposta">
+        <div class="flashcard-inner">
+          <div class="face face-front">
+            <span class="face-tag" id="frontTag">Domanda</span>
+            <p class="face-text" id="frontText"></p>
+            <span class="face-hint">Clicca per la risposta</span>
+          </div>
+          <div class="face face-back">
+            <span class="face-tag" id="backTag">Risposta</span>
+            <p class="face-text" id="backText"></p>
+            <span class="face-hint" id="backHint"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="study-actions" id="studyActions" hidden>
+        <button class="btn btn-wrong" id="wrongBtn">Sbagliata</button>
+        <button class="btn btn-again" id="againBtn">Ancora</button>
+        <button class="btn btn-right" id="rightBtn">Giusta</button>
+      </div>
+
+      <div class="card-actions" id="cardActions" hidden>
+        <button class="btn btn-ghost btn-sm" id="explainBtn">Spiega con l'AI</button>
+        <span class="src-badge" id="srcBadge"></span>
+      </div>
+
+      <div class="explain-box" id="explainBox" hidden></div>
+    </div>
+
+    <div class="list-view" id="listView" hidden>
+      <ul class="card-list" id="cardList"></ul>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="busy" id="busy" hidden>
+  <div class="spinner" aria-hidden="true"></div>
+  <p id="busyText">Lavoro&hellip;</p>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

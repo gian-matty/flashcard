@@ -1,0 +1,36 @@
+# Segreti e configurazione locale
+.env
+.env.*
+!.env.example
+
+# Ambiente virtuale
+.venv/
+venv/
+env/
+
+# Dati runtime: database e file caricati
+data/
+*.db
+*.sqlite3
+*.sqlite
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Test e type checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor e sistema
+.vscode/
+.idea/
+*.swp
+.DS_Store
